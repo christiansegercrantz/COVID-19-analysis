@@ -1,12 +1,30 @@
 rm(list = ls())
-
-#install.packages("readxl","dplyr","plotly","tidyverse","htmlwidgets")
+setwd("~/GitHub/COVID-19-analysis")
+#install.packages("readxl","dplyr","plotly","tidyverse","htmlwidgets","countrycode")
 library("readxl")
 library("dplyr")
 library("ggplot2")
 library("plotly")
 library("tidyverse")
 library("htmlwidgets")
+library("countrycode")
+
+poly_est <- function(data){
+  model <- lm(cumulative_cases ~ poly(index, 4, raw = TRUE), data=country_data)
+  future <- data.frame(index = tail(data$index,1))
+}
+
+exp_est <- function(data){
+  tryCatch({ 
+    exp  <- lm(log(cumulative_cases) ~ index, data=data)
+    exp$coefficients[["index"]]
+  }, error = function(e){return(NaN)})
+}
+
+theme_set(
+  theme_minimal() +
+    theme(legend.position = "right")
+)
 
 data <- data.frame(read_excel("data.xlsx"))
 data <- data[order(data$countriesAndTerritories, data$dateRep),]
@@ -19,22 +37,28 @@ data <- data %>%
   mutate("cases_per_100k" = (cases/10^6)) %>%
   mutate("deaths_per_100k" = (deaths/10^6)) %>%
   mutate("death_procentage_of_cases" = cumulative_deaths/cumulative_cases * 100) %>%
-  #mutate("Doubling time" =  log(2)/exp_est(data[index:index+7,])) %>%
+  mutate("continent" = countrycode(sourcevar = countriesAndTerritories,
+                                   origin = "country.name",
+                                   destination = "continent"))%>%
   ungroup()
+
+data %>% relocate(continent, .before = "countriesAndTerritories")
+
 data <- data %>%
   group_by(countriesAndTerritories) %>%
   mutate("Doubling_time" =  log(2)/exp_est(data[max(0,index-7):index,])) %>%
+  mutate("Real_cases" = (lag(cumulative_deaths,10)/0.01)*2^(10/5)) %>%
+  #transmute("Real_cases" = cumsum(Real_cases)) %>%
   ungroup()
-
-test <- filter(data,Doubling_time!=NaN) 
 
 #Todays data
 data_today <- filter(data, dateRep == (Sys.Date()-1)  & cumulative_cases >10)
 #Change country data
-country <-  c("Finland")
+country <-  c("United_States_of_America")
 countries <- c("Finland", "Sweden", "Norway", "Denmark")
 country_data <- filter(data, countriesAndTerritories == country & cumulative_cases != 0)
 countries_data <- filter(data, countriesAndTerritories %in% countries)
+europe <- filter(data, continent == "Europe")
 
 
 ### Plot the new cases of the country
@@ -54,23 +78,29 @@ ggplotly(cum_cases_country_plot)}
 ###
 
 ### Polynomial fitting
-poly_model <- lm(`cumulative cases` ~ poly(dateRep, 4), data=country_data)
+poly_model <- lm(cumulative_cases ~ poly(index, 4), data=country_data)
 summary(poly_model)
+future <- data.frame(index = tail(country_data$index,1)+c(0,1,2,3,4,5,6,7))
+future$predictions <- predict(poly_model, future)
 #Plot the fit
-{ plot(country_data$dateRep,country_data$cumulative_cases)
-  points(country_data$dateRep, predict(poly_model), type= 'l', col="red")
-  future <- data.frame(dateRep = as.Date(tail(country_data$dateRep,1))+c(1,2,3,4,5,6,7))
-  plot(future, predict(poly_model, future), type= 'l', col="orange")
-}
+polynomfit_plot <- ggplot(country_data, aes(index,cumulative_cases))+
+  geom_point(size=0.7) +
+  geom_line() +
+  geom_point(data=future, aes(index, predictions, col="red"), size=0.7)+
+  geom_line(data=future, aes(index, predictions, col="red")) +
+  xlab("Indices") + ylab("Cumulative Cases")
+ggplotly(polynomfit_plot)
+###
 
 ### Scatter plot of death rate
-death_rate_sct <- ggplot(data_today, aes(cases_per_100k, death_procentage_of_cases, label = countriesAndTerritories)) +
-  geom_point(size=2) +
+death_rate_sct <- ggplot(data_today, aes(cases_per_100k, death_procentage_of_cases, label = countriesAndTerritories, color = (death_procentage_of_cases*cases_per_100k))) +
+  geom_point(size=1 ) +
   xlab("Caseas/100k") + ylab("Death % of cases") +
   geom_text(aes(label=countryterritoryCode),position = position_nudge(y = 0.7)) +
-  scale_x_continuous(trans='log10')
-
+  scale_x_continuous(trans='log10') + 
+  scale_color_gradient(low="blue", high="red")
 ggplotly(death_rate_sct)
+###
 
 ###Death rate for specified countries
 death_rate <- 
@@ -80,14 +110,4 @@ death_rate <-
   xlab("Date") + ylab("Death % of cases")
 ggplotly(death_rate)
 
-poly_est <- function(data){
-  model <- lm(cumulative_cases ~ poly(index, 4, raw = TRUE), data=country_data)
-  future <- data.frame(index = tail(data$index,1))
-}
 
-exp_est <- function(data){
-  tryCatch({ 
-    exp  <- lm(log(cumulative_cases) ~ index, data=data)
-    exp$coefficients[["index"]]
-  }, error = function(e){return(NaN)})
-}
