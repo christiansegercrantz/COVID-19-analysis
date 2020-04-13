@@ -1,6 +1,6 @@
 rm(list = ls())
 setwd("~/GitHub/COVID-19-analysis")
-#install.packages("readxl","dplyr","plotly","tidyverse","htmlwidgets","countrycode","gganimate","tibbletime")
+#install.packages("readxl","dplyr","plotly","tidyverse","htmlwidgets","countrycode","gganimate","tibbletime","remotes)
 library("readxl")
 library("dplyr")
 library("ggplot2")
@@ -9,12 +9,12 @@ library("tidyverse")
 library("htmlwidgets")
 library("countrycode")
 library("tibbletime")
+library("remotes")
 
 poly_est <- function(data){
   model <- lm(cumulative_cases ~ poly(index, 4, raw = TRUE), data=country_data)
   future <- data.frame(index = tail(data$index,1))
 }
-
 exp_est <- function(y){
   tryCatch({ 
     x <- 1:length(y)
@@ -22,6 +22,7 @@ exp_est <- function(y){
     exp$coefficients[["x"]]
   }, error = function(e){return(NaN)})
 }
+roll_exp_est <- rollify(exp_est, window= 7, unlist = TRUE)
 
 theme_set(
   theme_minimal() +
@@ -41,6 +42,7 @@ data <- data %>%
   mutate("deaths_per_100k" = (deaths/10^6)) %>%
   mutate("death_procentage_of_cases" = cumulative_deaths/cumulative_cases * 100) %>%
   mutate("real_cases" = (lag(cumulative_deaths,10)/0.01)*2^(10/5)) %>%
+  mutate("doubling_time" =  log(2)/(roll_exp_est(cumulative_cases))) %>%
   mutate("continent" = countrycode(sourcevar = countriesAndTerritories,
                                    origin = "country.name",
                                    destination = "continent"))%>%
@@ -48,22 +50,16 @@ data <- data %>%
 
 #data %>% relocate(continent, .before = "countriesAndTerritories")
 
-roll_exp_est <- rollify(exp_est, window= 7, unlist = TRUE)
 
-data <- data %>%
-  group_by(countriesAndTerritories) %>%
-  mutate("doubling_time" =  log(2)/(roll_exp_est(cumulative_cases))) %>%
-  mutate("real_cases" = cumsum(real_cases)) %>%
-  ungroup()
 
-#data$doubling_time <- NA
+#data <- data %>%
+#  group_by(countriesAndTerritories) %>%
+#  mutate("real_cases" = cumsum(real_cases)) %>%
+#  ungroup()
 
-#for (i in data$index){
-#  data$doubling_time[i] = log(2)/exp_est(slice(data,max(i-7,0):min(i,length(data))))
-#} 
 
 #Todays data
-data_today <- filter(data, dateRep == (Sys.Date()-1)  & cumulative_cases >10)
+data_today <- filter(data, dateRep == (Sys.Date())  & cumulative_cases >10)
 #Change country data
 country <-  c("Finland")
 countries <- c("Finland", "Sweden", "Norway", "Denmark")
@@ -91,7 +87,7 @@ ggplotly(cum_cases_country_plot)}
 ### Polynomial fitting
 {poly_model <- lm(cumulative_cases ~ poly(index, 4), data=country_data)
 #summary(poly_model)
-future <- data.frame(index = tail(country_data$index,1)+c(-5,-4,-3,-2,-1,0,1,2,3,4,5,6,7))
+future <- data.frame(index = tail(country_data$index,1)+c(0,1,2,3,4,5,6,7))
 poly_model_fit <- predict(poly_model, future, se.fit = TRUE)
 future$predictions <- poly_model_fit$fit
 future$lwr <- poly_model_fit$fit-1.99*poly_model_fit$se.fit
@@ -134,7 +130,7 @@ ggplotly(death_rate)}
 ggplotly(doubling_rate)}
 
 ### Scatter plot of doubling time
-{doubling_sct <- ggplot(data_today[which(!is.infinite(data_today$doubling_time)) & data_today$doubling_time < 100,], aes(cumulative_cases, doubling_time, label = countriesAndTerritories, color = -doubling_time)) +
+{doubling_sct <- ggplot(data[which(!is.infinite(data$doubling_time)) & data$doubling_time < 100,], aes(cumulative_cases, doubling_time, label = countriesAndTerritories, color = -doubling_time)) +
     geom_point(size=1) +
     xlab("Caseas/100k") + ylab("Doubling time in days") +
     geom_text(aes(label=countryterritoryCode), position = position_nudge(y = 0.05)) +
