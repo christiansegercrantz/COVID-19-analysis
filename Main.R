@@ -1,6 +1,6 @@
 rm(list = ls())
 setwd("~/GitHub/COVID-19-analysis")
-#install.packages("readxl","dplyr","plotly","tidyverse","htmlwidgets","countrycode","gganimate","tibbletime","remotes","utils")
+#install.packages("readxl","dplyr","plotly","tidyverse","htmlwidgets","countrycode","gganimate","tibbletime","remotes","utils", "stringr", "maps", "mapdata")
 library("readxl")
 library("dplyr")
 library("ggplot2")
@@ -11,6 +11,9 @@ library("countrycode")
 library("tibbletime")
 library("remotes")
 library("utils")
+library("stringr")
+library("maps")
+library("mapdata")
 
 
 poly_est <- function(y){
@@ -54,18 +57,11 @@ data <- data %>%
 #data %>% relocate(continent, .before = "countriesAndTerritories")
 
 
-
-#data <- data %>%
-#  group_by(countriesAndTerritories) %>%
-#  mutate("real_cases" = cumsum(real_cases)) %>%
-#  ungroup()
-
-
 #Todays data
 data_today <- filter(data, dateRep == (Sys.Date())  & cumulative_cases >10)
 #Change country data
 country <-  c("Finland")
-countries <- c("China", "Italy", "Spain", "United_States_of_America")
+countries <- c("Finland", "Sweden", "Norway", "Denmark")
 country_data <- filter(data, countriesAndTerritories == country & cumulative_cases != 0)
 countries_data <- filter(data, countriesAndTerritories %in% countries)
 europe <- filter(data, continent == "Europe")
@@ -79,6 +75,7 @@ europe <- filter(data, continent == "Europe")
                         xlab("Date") + ylab("New cases / day")
 ggplotly(new_cases_country_plot)}
 ###
+
 ### One Country: Cumulative cases
 {cum_cases_country_plot <- ggplot(data=country_data[which(country_data$'cumulative_cases'!=0),], aes(x=dateRep, y=cumulative_cases, group=1)) +
                           geom_line(linetype = "dashed")+
@@ -122,8 +119,8 @@ ggplotly(cum_cases_country_plot)}
   ggplot(countries_data[which(countries_data$'cumulative_cases'!=0),], aes(dateRep, cases_per_100k, group = countriesAndTerritories, color = countriesAndTerritories )) +
   geom_line() + 
   geom_point(size = 0.5) +
-  xlab("Date") + ylab("Cases/100k") +
-  scale_y_continuous(trans='log10')
+  xlab("Date") + ylab("Cases/100k")# +
+  #scale_y_continuous(trans='log10')
 ggplotly(cumulative_cases_spec)}
 ###
 
@@ -146,7 +143,7 @@ ggplotly(cumulative_cases_spec)}
 ###
 
 ### All countries: Scatter plot of death rate
-{death_rate_sct <- ggplot(data_today[which(data_today$popData2018 > 10^6),], aes(cases_per_100k, death_procentage_of_cases, frame = dateRep, label = countriesAndTerritories, color = deaths_per_100k)) +
+{death_rate_sct <- ggplot(data_today[which(data_today$popData2018 > 10^6 & data_today$cumulative_deaths > 10) ,], aes(cases_per_100k, death_procentage_of_cases, frame = dateRep, label = countriesAndTerritories, color = deaths_per_100k)) +
   geom_point(size=1 ) +
   xlab("Caseas/100k") + ylab("Death % of cases") +
   geom_text(aes(label=countryterritoryCode), position = position_nudge(y = 0.7)) +
@@ -160,7 +157,8 @@ ggplotly(death_rate_sct)}
     geom_point(size=1) +
     xlab("Caseas/100k") + ylab("Doubling time in days") +
     geom_text(aes(label=countryterritoryCode), position = position_nudge(y = 0.05)) +
-    scale_x_continuous(trans='log10') + scale_y_continuous(trans='log10') #+
+    scale_x_continuous(trans='log10') + scale_y_continuous(trans='log10') +
+    guides(fill=FALSE) #+
     #scale_color_gradient(low="blue", high="red")
 ggplotly(doubling_sct)}
 ###
