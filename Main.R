@@ -27,7 +27,24 @@ exp_est <- function(y){
     exp$coefficients[["x"]]
       }, error = function(e){return(NaN)})
 }
+lin_est <- function(y){
+  tryCatch({ 
+    x <- 1:length(y)
+    lin  <- lm(y ~ x)
+    lin$coefficients[["x"]]
+  }, error = function(e){return(NaN)})
+}
+est_comp <- function(y){
+  tryCatch({ 
+    x <- 1:length(y)
+    exp  <- summary(lm(log(y) ~ x))
+    poly <- summary(lm(y ~ poly(x, 4, raw = TRUE)))
+    lin <- summary(lm(y~x))
+    exp$coefficients[["x"]]
+  }, error = function(e){return(NaN)})
+}
 roll_exp_est <- rollify(exp_est, window= 7, unlist = TRUE)
+roll_lin_est <- rollify(lin_est, window= 7, unlist = TRUE)
 
 theme_set(
   theme_minimal() +
