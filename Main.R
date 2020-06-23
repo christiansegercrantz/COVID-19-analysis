@@ -1,5 +1,5 @@
 rm(list = ls())
-setwd("~/GitHub/COVID-19-analysis")
+#setwd("~/GitHub/COVID-19-analysis")
 #install.packages("readxl","dplyr","plotly","tidyverse","htmlwidgets","countrycode","gganimate","tibbletime","remotes","utils", "stringr", "maps", "mapdata")
 library("readxl")
 library("dplyr")
@@ -34,24 +34,39 @@ lin_est <- function(y){
     lin$coefficients[["x"]]
   }, error = function(e){return(NaN)})
 }
-est_comp <- function(y){
+est_comp <- function(data,column,tail_amount = length(eval(parse(text=paste0("data$",column))))){
+  y <- tail(eval(parse(text=paste0("data$",column))),tail_amount)
+  index <- tail(data$index,tail_amount)
   tryCatch({ 
-    x <- 1:length(y)
-    exp  <- summary(lm(log(y) ~ x))
-    poly <- summary(lm(y ~ poly(x, 4, raw = TRUE)))
-    lin <- summary(lm(y~x))
-    exp$coefficients[["x"]]
-  }, error = function(e){return(NaN)})
+    exp  <- lm(log(y) ~ index)
+    plot(index,y)
+  }, error = function(e){exp <- NaN})
+  tryCatch({ 
+    poly <- lm(y ~ poly(index, 4, raw = TRUE))
+  }, error = function(e){poly <- NaN})
+  tryCatch({ 
+    lin <- lm(y~index)
+  }, error = function(e){lin <- NaN})
+  tryCatch({ 
+    log <- lm(y~log(index))
+  }, error = function(e){log <- NaN})
+    rsqrd <- c(summary(exp)$r.squared,summary(poly)$r.squared,summary(lin)$r.squared,summary(log)$r.squared)
+    df <- data.frame(t(rsqrd))
+    names(df) <- c("exp","poly","lin","log")#(c(deparse(substitute(exp)),deparse(substitute(poly)),deparse(substitute(lin))))
+    best <- names(df)[which(df==max(df))]
+    ret <- get(as.character(best))
+    return(ret)
 }
 roll_exp_est <- rollify(exp_est, window= 7, unlist = TRUE)
 roll_lin_est <- rollify(lin_est, window= 7, unlist = TRUE)
+week_fun <- function(date){
+  as.integer(strftime(date, format = "%V"))
+}
 
 theme_set(
   theme_minimal() +
-    theme(legend.position = "right")
-)
+    theme(legend.position = "right"))
 
-#data <- data.frame(read_excel("data.xlsx"))
 data <- read.csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv", na.strings = "", fileEncoding = "UTF-8-BOM")
 data$dateRep <- as.Date(data$dateRep, format = "%d/%m/%Y")
 data <- data[order(data$countriesAndTerritories, data$dateRep),]
@@ -61,125 +76,26 @@ data <- data %>%
   mutate("index" = row_number()) %>%
   mutate("cumulative_cases" = cumsum(cases)) %>%
   mutate("cumulative_deaths" = cumsum(deaths)) %>%
-  mutate("cases_per_100k" = (cumulative_cases/(popData2018/10^5))) %>%
-  mutate("deaths_per_100k" = (cumulative_deaths/(popData2018/10^5))) %>%
+  mutate("cases_per_100k" = (cumulative_cases/(popData2019/10^5))) %>%
+  mutate("deaths_per_100k" = (cumulative_deaths/(popData2019/10^5))) %>%
   mutate("death_procentage_of_cases" = cumulative_deaths/cumulative_cases * 100) %>%
   mutate("real_cases" = (lag(cumulative_deaths,10)/0.01)*2^(10/5)) %>%
   mutate("doubling_time" =  log(2)/(roll_exp_est(cumulative_cases))) %>%
-  mutate("continent" = countrycode(sourcevar = countriesAndTerritories,
-                                   origin = "country.name",
-                                   destination = "continent"))%>%
-  ungroup()
+  mutate("index_since_100" = ifelse(cumulative_cases>100, 1:n(), 0)) %>%
+  mutate("index_since_100" = ifelse(index_since_100>0, index_since_100 - min(index_since_100[index_since_100!=0])+1,0 )) %>%
+  ungroup() %>%
+  filter(continentExp != "Other")
 
 #data %>% relocate(continent, .before = "countriesAndTerritories")
 
 
 #Todays data
-data_today <- filter(data, dateRep == (Sys.Date())  & cumulative_cases >10)
+#data_today <- filter(data, dateRep == (Sys.Date())  & cumulative_cases >10)
 #Change country data
-country <-  c("Finland")
-countries <- c("Finland", "Sweden", "Norway", "Denmark")
-country_data <- filter(data, countriesAndTerritories == country & cumulative_cases != 0)
-countries_data <- filter(data, countriesAndTerritories %in% countries)
-europe <- filter(data, continent == "Europe")
+#country <-  c("Finland")
+#countries <- c("Finland", "Sweden", "Norway", "Denmark")
+#country_data <- filter(data, countriesAndTerritories == country & cumulative_cases != 0)
+#countries_data <- filter(data, countriesAndTerritories %in% countries)
+#europe <- filter(data, continent == "Europe")
 
-
-### One country: New cases
-{new_cases_country_plot<-ggplot(data=country_data[which(country_data$'cumulative_cases'!=0),], aes(x=dateRep, y=cases)) +
-                        geom_bar(stat="identity", fill="steelblue") +
-                        geom_text(aes(label=cases), vjust=-0.3, size=3.5) +
-                        theme_minimal() +
-                        xlab("Date") + ylab("New cases / day")
-ggplotly(new_cases_country_plot)}
-###
-
-### One Country: Cumulative cases
-{cum_cases_country_plot <- ggplot(data=country_data[which(country_data$'cumulative_cases'!=0),], aes(x=dateRep, y=cumulative_cases, group=1)) +
-                          geom_line(linetype = "dashed")+
-                          geom_text(aes(label=cases), position = position_nudge(y = 2, x= -2), size=3.5) +
-                          geom_point(size = 1)
-ggplotly(cum_cases_country_plot)}
-###
-
-### One Country: Polynomial fitting
-{poly_model <- lm(cumulative_cases ~ poly(index, 4), data=country_data)
-  #summary(poly_model)
-  future <- data.frame(index = tail(country_data$index,1)+c(0,1,2,3,4,5,6,7))
-  poly_model_fit <- predict(poly_model, future, se.fit = TRUE)
-  future$predictions <- poly_model_fit$fit
-  future$lwr <- poly_model_fit$fit-1.99*poly_model_fit$se.fit
-  future$upr <- poly_model_fit$fit+1.99*poly_model_fit$se.fit
-  #Plot the fit
-  polynomfit_plot <- ggplot(country_data, aes(index,cumulative_cases))+
-    geom_point(size=0.7) +
-    geom_line() +
-    geom_point(data=future, aes(index, predictions, col="red"), size=0.7)+
-    geom_line(data=future, aes(index, predictions, col="red")) +
-    xlab("Indices") + ylab("Cumulative Cases") +
-    geom_ribbon(data=future, aes(x=index, y=predictions,  ymin=lwr, ymax=upr), alpha = 0.3, inherit.aes = FALSE)
-  ggplotly(polynomfit_plot)}
-###
-
-### One country: Real cases
-{new_cases_country_plot<-ggplot(data=country_data[which(country_data$'cumulative_cases' > 10),], aes(x=dateRep, y=predict(poly_est(real_cases)))) +
-    geom_bar(aes(x=dateRep, y=real_cases),stat="identity", fill="steelblue", alpha=0.5) +
-    geom_point(stat="identity", col="steelblue") + geom_line(linetype = "dashed", col="steelblue") +
-    #geom_text(aes(label=real_cases), position = position_nudge(y = 500), size=3.5) +
-    theme_minimal() +
-    xlab("Date") + ylab("Predicted real cases vs reported cases") +
-    geom_point(aes(y=cumulative_cases)) + geom_line(aes(y=cumulative_cases),linetype = "dashed")
-  ggplotly(new_cases_country_plot)}
-###
-
-### Specific countries: Cumulative cases/100k
-{cumulative_cases_spec <- 
-  ggplot(countries_data[which(countries_data$'cumulative_cases'!=0),], aes(dateRep, cases_per_100k, group = countriesAndTerritories, color = countriesAndTerritories )) +
-  geom_line() + 
-  geom_point(size = 0.5) +
-  xlab("Date") + ylab("Cases/100k")# +
-  #scale_y_continuous(trans='log10')
-ggplotly(cumulative_cases_spec)}
-###
-
-### Specific countries: Death rate
-{death_rate <- 
-    ggplot(countries_data[which(countries_data$'cumulative_deaths'!=0),], aes(dateRep, death_procentage_of_cases, group = countriesAndTerritories, color = countriesAndTerritories )) +
-    geom_line() + 
-    geom_point(size = 0.5) +
-    xlab("Date") + ylab("Death % of cases")
-  ggplotly(death_rate)}
-###
-
-###Specific countries: Doubling rate
-{doubling_rate <- 
-    ggplot(countries_data[which(countries_data$doubling_time < 100),], aes(dateRep, doubling_time, group = countriesAndTerritories, color = countriesAndTerritories )) +
-    geom_line() + 
-    geom_point(size = 0.5) +
-    xlab("Date") + ylab("Doubling speed [Days]")
-  ggplotly(doubling_rate)}
-###
-
-### All countries: Scatter plot of death rate
-{death_rate_sct <- ggplot(data_today[which(data_today$popData2018 > 10^6 & data_today$cumulative_deaths > 10) ,], aes(cases_per_100k, death_procentage_of_cases, frame = dateRep, label = countriesAndTerritories, color = deaths_per_100k)) +
-  geom_point(size=1 ) +
-  xlab("Caseas/100k") + ylab("Death % of cases") +
-  geom_text(aes(label=countryterritoryCode), position = position_nudge(y = 0.7)) +
-  scale_x_continuous(trans='log10') + 
-  scale_color_gradient(low="blue", high="red") + theme(legend.position = "none")
-ggplotly(death_rate_sct)}
-###
-
-### All countries: Scatter plot of doubling time
-{doubling_sct <- ggplot(data_today[which(data_today$doubling_time < 100 & data_today$cumulative_cases > 1000),], aes(cumulative_cases, doubling_time, label = countriesAndTerritories, color = -doubling_time)) +
-    geom_point(size=1) +
-    xlab("Caseas/100k") + ylab("Doubling time in days") +
-    geom_text(aes(label=countryterritoryCode), position = position_nudge(y = 0.05)) +
-    scale_x_continuous(trans='log10') + scale_y_continuous(trans='log10') +
-    guides(fill=FALSE) #+
-    #scale_color_gradient(low="blue", high="red")
-ggplotly(doubling_sct)}
-###
-
-
-
-
+      
