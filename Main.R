@@ -67,24 +67,26 @@ theme_set(
   theme_minimal() +
     theme(legend.position = "right"))
 
-data <- read.csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv", na.strings = "", fileEncoding = "UTF-8-BOM")
-data$dateRep <- as.Date(data$dateRep, format = "%d/%m/%Y")
-data <- data[order(data$countriesAndTerritories, data$dateRep),]
-data <- data %>%
-  group_by(countriesAndTerritories) %>%
-  filter(n()>7) %>%
-  mutate("index" = row_number()) %>%
-  mutate("cumulative_cases" = cumsum(cases)) %>%
-  mutate("cumulative_deaths" = cumsum(deaths)) %>%
-  mutate("cases_per_100k" = (cumulative_cases/(popData2019/10^5))) %>%
-  mutate("deaths_per_100k" = (cumulative_deaths/(popData2019/10^5))) %>%
-  mutate("death_procentage_of_cases" = cumulative_deaths/cumulative_cases * 100) %>%
-  mutate("real_cases" = (lag(cumulative_deaths,10)/0.01)*2^(10/5)) %>%
-  mutate("doubling_time" =  log(2)/(roll_exp_est(cumulative_cases))) %>%
-  mutate("index_since_100" = ifelse(cumulative_cases>100, 1:n(), 0)) %>%
-  mutate("index_since_100" = ifelse(index_since_100>0, index_since_100 - min(index_since_100[index_since_100!=0])+1,0 )) %>%
-  ungroup() %>%
-  filter(continentExp != "Other")
+# data <- read.csv("https://opendata.ecdc.europa.eu/covid19/casedistribution/csv", na.strings = "", fileEncoding = "UTF-8-BOM")
+# data$dateRep <- as.Date(data$dateRep, format = "%d/%m/%Y")
+# data <- data[order(data$countriesAndTerritories, data$dateRep),]
+# data <- data %>%
+#   group_by(countriesAndTerritories) %>%
+#   filter(n()>7) %>%
+#   mutate("index" = row_number()) %>%
+#   mutate("rolling_avg_cases" = zoo::rollmean(cases, k=7, fill = NA)) %>%
+#   mutate("cumulative_cases" = cumsum(cases)) %>%
+#   mutate("cumulative_deaths" = cumsum(deaths)) %>%
+#   mutate("rolling_avg_deaths" = zoo::rollmean(deaths, k=7, fill = NA)) %>%
+#   mutate("cases_per_100k" = (cumulative_cases/(popData2019/10^5))) %>%
+#   mutate("deaths_per_100k" = (cumulative_deaths/(popData2019/10^5))) %>%
+#   mutate("death_procentage_of_cases" = cumulative_deaths/cumulative_cases * 100) %>%
+#   mutate("real_cases" = (lag(cumulative_deaths,10)/0.01)*2^(10/5)) %>%
+#   mutate("doubling_time" =  log(2)/(roll_exp_est(cumulative_cases))) %>%
+#   mutate("index_since_100" = ifelse(cumulative_cases>100, 1:n(), 0)) %>%
+#   mutate("index_since_100" = ifelse(index_since_100>0, index_since_100 - min(index_since_100[index_since_100!=0])+1,0 )) %>%
+#   ungroup() %>%
+#   filter(continentExp != "Other")
 
 #data %>% relocate(continent, .before = "countriesAndTerritories")
 

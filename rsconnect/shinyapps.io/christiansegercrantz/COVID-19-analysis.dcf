@@ -5,9 +5,9 @@ account: christiansegercrantz
 server: shinyapps.io
 hostUrl: https://api.shinyapps.io/v1
 appId: 2294655
-bundleId: 3303433
+bundleId: 4185318
 url: https://christiansegercrantz.shinyapps.io/COVID-19-analysis/
-when: 1592855491.12894
+when: 1612539145.83629
 asMultiple: FALSE
 asStatic: FALSE
 ignoredFiles: .gitattributes|.RData|current.R|Data.xlsx|over_time.R|test.R|test2.R|World.R
